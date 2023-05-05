@@ -41,10 +41,11 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
     val s3Client = inject[S3Client]
     val authService = inject[AuthService]
 
-    when(authService.authenticate(any[String], any[String])) thenReturn Future.successful(Some(User("test", "test")))
-
     val key = "test-file.txt"
+    val username = "test"
     val headers = FakeHeaders(Seq(AUTHORIZATION -> "Basic dGVzdDp0ZXN0", HOST -> "localhost"))
+
+    when(authService.authenticate(any[String], any[String])) thenReturn Future.successful(Some(User(username, "test")))
 
     "download a file" in {
       // WITH
@@ -56,7 +57,7 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
       val source: Source[ByteString, Future[ObjectMetadata]] =
         Source.single(ByteString("test")).mapMaterializedValue(_ => Future.successful(ObjectMetadata(List(header))))
 
-      when(s3Client.download(key)) thenReturn source
+      when(s3Client.download(username, key)) thenReturn source
 
       // WHEN
       val request = FakeRequest(GET.value, s"/api/v1/files/$key", headers, AnyContentAsEmpty)
@@ -75,7 +76,7 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
       val source: Source[ByteString, Future[ObjectMetadata]] =
         Source.single(ByteString("test")).mapMaterializedValue(_ => Future.failed(S3Exception("File not found", NotFound)))
 
-      when(s3Client.download(key)) thenReturn source
+      when(s3Client.download(username, key)) thenReturn source
 
       // WHEN
       val request = FakeRequest(GET.value, s"/api/v1/files/$key", headers, AnyContentAsEmpty)
@@ -88,7 +89,7 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
 
     "delete a file" in {
       // WITH
-      when(s3Client.delete(key)) thenReturn Source.single(Done)
+      when(s3Client.delete(username, key)) thenReturn Source.single(Done)
 
       // WHEN
       val request = FakeRequest(DELETE.value, s"/api/v1/files/$key", headers, AnyContentAsEmpty)
@@ -108,7 +109,7 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
         case (key, size) => ListBucketResultContents("", key, "", size, null, "")
       }
 
-      when(s3Client.list) thenReturn Source(objectSummaries)
+      when(s3Client.list(username)) thenReturn Source(objectSummaries)
 
       // WHEN
       val request = FakeRequest(GET.value, "/api/v1/files", headers, AnyContentAsEmpty)

@@ -7,8 +7,11 @@ import javax.inject.Inject
 import scala.concurrent.{ExecutionContext, Future}
 
 
-class AuthController @Inject()(cc: ControllerComponents, authService: AuthService)(implicit ec: ExecutionContext)
-  extends AbstractController(cc) {
+class AuthController @Inject()(
+  cc: ControllerComponents,
+  authService: AuthService,
+  authenticatedAction: AuthenticatedAction
+)(implicit ec: ExecutionContext) extends AbstractController(cc) {
 
   def register: Action[AnyContent] = Action.async { implicit request =>
     val usernameOpt = request.body.asJson.flatMap(_.as[JsObject].value.get("username")).map(_.as[String])
@@ -25,5 +28,9 @@ class AuthController @Inject()(cc: ControllerComponents, authService: AuthServic
         Future.successful(
           BadRequest(Json.obj("status" -> BAD_REQUEST, "detail" -> "Invalid username or password")))
     }
+  }
+
+  def current: Action[AnyContent] = authenticatedAction.async { implicit request =>
+    Future.successful(Ok(Json.obj("status" -> OK, "data" -> Json.obj("user" -> request.user))))
   }
 }

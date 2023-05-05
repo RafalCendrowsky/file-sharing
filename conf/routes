@@ -3,10 +3,11 @@
 # https://www.playframework.com/documentation/latest/ScalaRouting
 # ~~~~
 
-POST          /api/v1/register          auth.AuthController.register
+POST          /api/v1/auth/register        auth.AuthController.register
+GET           /api/v1/auth/current         auth.AuthController.current
 
-POST          /api/v1/files             files.FileController.upload
-GET           /api/v1/files/:key        files.FileController.download(key: String)
-DELETE        /api/v1/files/:key        files.FileController.delete(key: String)
-GET           /api/v1/files             files.FileController.list
+POST          /api/v1/files                files.FileController.upload
+GET           /api/v1/files/:key           files.FileController.download(key: String)
+DELETE        /api/v1/files/:key           files.FileController.delete(key: String)
+GET           /api/v1/files                files.FileController.list
 

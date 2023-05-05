@@ -2,7 +2,7 @@ package files
 
 import akka.http.scaladsl.model.IllegalUriException
 import akka.stream.alpakka.s3.S3Exception
-import akka.stream.scaladsl.{FileIO, Keep, Sink, Source}
+import akka.stream.scaladsl.{FileIO, Keep, Sink}
 import akka.stream.{IOResult, Materializer}
 import akka.util.ByteString
 import auth.AuthenticatedAction
@@ -24,13 +24,13 @@ class FileController @Inject()(
   authenticatedAction: AuthenticatedAction
 )(implicit ec: ExecutionContext, materializer: Materializer) extends AbstractController(cc) {
 
-  def upload: Action[MultipartFormData[Source[ByteString, _]]] =
+  def upload: Action[MultipartFormData[Path]] =
     authenticatedAction.async(parse.multipartFormData(handleFilePart, maxLength = 2 * 1024 * 1024)) { implicit request =>
       request.body.file("file").fold(
         Future.successful(BadRequest("Missing file"))
       ) {
-        case FilePart(_, filename, _, source, _, _) =>
-          source.runWith(s3Client.multipartUpload(request.user, filename)).map {
+        case FilePart(_, filename, _, path, _, _) =>
+          FileIO.fromPath(path).runWith(s3Client.multipartUpload(request.user, filename)).map {
             result => Ok(Json.toJson(Map("status" -> "success", "key" -> result.getKey)))
           }
       }
@@ -69,12 +69,12 @@ class FileController @Inject()(
     }
   }
 
-  private def handleFilePart: FilePartHandler[Source[ByteString, _]] = {
+  private def handleFilePart: FilePartHandler[Path] = {
     case FileInfo(_, fileName, contentType, _) =>
       val tempFile: Path = Files.createTempFile("prefix-", fileName)
       val sink: Sink[ByteString, Future[IOResult]] = FileIO.toPath(tempFile)
       Accumulator(sink).map { case IOResult(_, Success(_)) =>
-        FilePart("file", fileName, contentType, FileIO.fromPath(tempFile))
+        FilePart("file", fileName, contentType, tempFile)
       }
   }
 
