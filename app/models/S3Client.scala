@@ -1,17 +1,19 @@
 package models
 
-import akka.{Done, NotUsed}
-import akka.stream.alpakka.s3.{MultipartUploadResult, ObjectMetadata}
 import akka.stream.alpakka.s3.scaladsl.S3
+import akka.stream.alpakka.s3.{MultipartUploadResult, ObjectMetadata}
 import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
+import akka.{Done, NotUsed}
 import com.typesafe.config.ConfigFactory
 
 import scala.concurrent.Future
 
 trait S3Client {
   def multipartUpload(key: String): Sink[ByteString, Future[MultipartUploadResult]]
+
   def download(key: String): Source[ByteString, Future[ObjectMetadata]]
+
   def delete(key: String): Source[Done, NotUsed]
 }
 

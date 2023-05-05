@@ -25,15 +25,15 @@ class FileController @Inject()(
   def upload: Action[MultipartFormData[MultipartUploadResult]] =
     Action(parse.multipartFormData(handleAWSUploadResult, maxLength = 2 * 1024 * 1024)) { implicit request =>
       val maybeUploadResult = request.body.file("file").map {
-          case FilePart(_, _, _,  multipartUploadResult, _, _) =>
-            multipartUploadResult
+        case FilePart(_, _, _, multipartUploadResult, _, _) =>
+          multipartUploadResult
       }
       maybeUploadResult.fold(
         InternalServerError("Something went wrong!")
-      ) (uploadResult =>
+      )(uploadResult =>
         Ok(Json.toJson(Map("status" -> "success", "key" -> uploadResult.getKey)))
       )
-  }
+    }
 
   def download(key: String): Action[AnyContent] = Action.async { implicit request =>
     val s3ObjectSource = s3Client.download(key)
@@ -45,13 +45,17 @@ class FileController @Inject()(
         header = ResponseHeader(OK, Map(CONTENT_LENGTH -> contentLength.toString)),
         body = HttpEntity.Streamed(s3ObjectSource, None, Some("application/octet-stream"))
       )
-    }.recover { recoverS3Result }
+    }.recover {
+      recoverS3Result
+    }
   }
 
   def delete(key: String): Action[AnyContent] = Action.async { implicit request =>
     s3Client.delete(key).run()(materializer).map { _ =>
       Ok(Json.obj("status" -> "success"))
-    }.recover { recoverS3Result }
+    }.recover {
+      recoverS3Result
+    }
   }
 
   private def handleAWSUploadResult: FilePartHandler[MultipartUploadResult] = {

@@ -1,4 +1,4 @@
-package controller
+package controllers
 
 import akka.Done
 import akka.http.scaladsl.model.HttpHeader
@@ -11,17 +11,17 @@ import akka.util.{ByteString, Timeout}
 import models.S3Client
 import org.mockito.MockitoSugar.when
 import org.openqa.selenium.InvalidArgumentException
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatestplus.play.PlaySpec
 import org.scalatestplus.play.guice.GuiceOneAppPerSuite
 import play.api.Application
-import play.api.http.HeaderNames.CONTENT_LENGTH
-import play.api.test.Helpers.{contentType, route, status, writeableOf_AnyContentAsEmpty}
+import play.api.test.Helpers.{CONTENT_LENGTH, route, status, writeableOf_AnyContentAsEmpty}
 import play.api.test.{FakeRequest, Injecting}
 
+import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.{Await, Future}
 
-class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecting {
+class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injecting with ScalaFutures {
 
   override def fakeApplication(): Application = {
     import modules.TestModule
@@ -48,16 +48,16 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
         Source.single(ByteString("test")).mapMaterializedValue(_ => Future.successful(ObjectMetadata(List(header))))
 
       // Mock file download
-      when (s3Client.download(key)) thenReturn source
+      when(s3Client.download(key)) thenReturn source
 
       val request = FakeRequest(GET.value, s"/api/v1/files/$key")
       val result = route(app, request).get
-      implicit val timeout: Timeout = Timeout(300.millis)
 
-      status(result) mustBe OK.intValue
-      Await.result(result, timeout.duration)
-        .header.headers.get("Content-Length") mustBe Some("100")
-      contentType(result) mustBe Some("application/octet-stream")
+      whenReady(result) { completed =>
+        completed.header.status mustBe OK.intValue
+        completed.header.headers.get(CONTENT_LENGTH) mustBe Some("100")
+        completed.body.contentType mustBe Some("application/octet-stream")
+      }
     }
 
     "return an appropriate error when the file does not exist" in {
@@ -80,9 +80,10 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
 
       val request = FakeRequest(DELETE.value, s"/api/v1/files/$key")
       val result = route(app, request).get
-      implicit val timeout: Timeout = Timeout(300.millis)
 
-      status(result) mustBe OK.intValue
+      whenReady(result) {
+        _.header.status mustBe OK.intValue
+      }
     }
 
   }
