@@ -4,4 +4,5 @@
 # ~~~~
 
 # An example controller showing a sample home page
-POST    /api/v1/files            controllers.UploadController.upload
+POST    /api/v1/files            controllers.FileController.upload
+GET     /api/v1/files/:key        controllers.FileController.download(key: String)
