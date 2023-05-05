@@ -1,4 +1,4 @@
-package controllers
+package files
 
 import akka.Done
 import akka.http.scaladsl.model.HttpHeader
@@ -8,7 +8,8 @@ import akka.http.scaladsl.model.StatusCodes.{NotFound, OK}
 import akka.stream.alpakka.s3.{ListBucketResultContents, ObjectMetadata, S3Exception}
 import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
-import models.S3Client
+import auth.{AuthService, User}
+import org.mockito.ArgumentMatchers.any
 import org.mockito.MockitoSugar.when
 import org.openqa.selenium.InvalidArgumentException
 import org.scalatest.concurrent.ScalaFutures
@@ -16,8 +17,9 @@ import org.scalatestplus.play.PlaySpec
 import org.scalatestplus.play.guice.GuiceOneAppPerSuite
 import play.api.Application
 import play.api.libs.json.{JsArray, Json}
-import play.api.test.Helpers.{CONTENT_LENGTH, route, status, writeableOf_AnyContentAsEmpty}
-import play.api.test.{FakeRequest, Injecting}
+import play.api.mvc.AnyContentAsEmpty
+import play.api.test.Helpers.{AUTHORIZATION, CONTENT_LENGTH, HOST, route, status, writeableOf_AnyContentAsEmpty}
+import play.api.test.{FakeHeaders, FakeRequest, Injecting}
 
 import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
@@ -32,16 +34,21 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
       .build()
   }
 
+
   "File controller" must {
 
     // This is a mock of the S3Client trait
     val s3Client = inject[S3Client]
+    val authService = inject[AuthService]
+
+    when(authService.authenticate(any[String], any[String])) thenReturn Future.successful(Some(User("test", "test")))
 
     val key = "test-file.txt"
+    val headers = FakeHeaders(Seq(AUTHORIZATION -> "Basic dGVzdDp0ZXN0", HOST -> "localhost"))
 
     "download a file" in {
       // WITH
-      val header: HttpHeader =HttpHeader.parse(CONTENT_LENGTH, "100") match {
+      val header: HttpHeader = HttpHeader.parse(CONTENT_LENGTH, "100") match {
         case HttpHeader.ParsingResult.Ok(h, _) => h
         case Error(_) => throw new InvalidArgumentException("Invalid header")
       }
@@ -52,7 +59,7 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
       when(s3Client.download(key)) thenReturn source
 
       // WHEN
-      val request = FakeRequest(GET.value, s"/api/v1/files/$key")
+      val request = FakeRequest(GET.value, s"/api/v1/files/$key", headers, AnyContentAsEmpty)
       val result = route(app, request).get
 
       // THEN
@@ -71,7 +78,7 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
       when(s3Client.download(key)) thenReturn source
 
       // WHEN
-      val request = FakeRequest(GET.value, s"/api/v1/files/$key")
+      val request = FakeRequest(GET.value, s"/api/v1/files/$key", headers, AnyContentAsEmpty)
       val result = route(app, request).get
 
       // THEN
@@ -84,7 +91,7 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
       when(s3Client.delete(key)) thenReturn Source.single(Done)
 
       // WHEN
-      val request = FakeRequest(DELETE.value, s"/api/v1/files/$key")
+      val request = FakeRequest(DELETE.value, s"/api/v1/files/$key", headers, AnyContentAsEmpty)
       val result = route(app, request).get
 
       // THEN
@@ -104,7 +111,7 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
       when(s3Client.list) thenReturn Source(objectSummaries)
 
       // WHEN
-      val request = FakeRequest(GET.value, "/api/v1/files")
+      val request = FakeRequest(GET.value, "/api/v1/files", headers, AnyContentAsEmpty)
       val result = route(app, request).get
 
       // THEN

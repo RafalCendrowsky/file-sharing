@@ -4,7 +4,7 @@
 # ~~~~
 
 # An example controller showing a sample home page
-POST          /api/v1/files             controllers.FileController.upload
-GET           /api/v1/files/:key        controllers.FileController.download(key: String)
-DELETE        /api/v1/files/:key        controllers.FileController.delete(key: String)
-GET           /api/v1/files             controllers.FileController.list
+POST          /api/v1/files             files.FileController.upload
+GET           /api/v1/files/:key        files.FileController.download(key: String)
+DELETE        /api/v1/files/:key        files.FileController.delete(key: String)
+GET           /api/v1/files             files.FileController.list

@@ -1,10 +1,10 @@
-package controllers
+package files
 
 import akka.http.scaladsl.model.IllegalUriException
 import akka.stream.Materializer
 import akka.stream.alpakka.s3.{MultipartUploadResult, S3Exception}
 import akka.stream.scaladsl.{Keep, Sink}
-import models.S3Client
+import auth.AuthenticatedAction
 import play.api.http.HttpEntity
 import play.api.libs.json.{JsObject, Json}
 import play.api.libs.streams.Accumulator
@@ -18,23 +18,24 @@ import scala.concurrent.ExecutionContext
 
 class FileController @Inject()(
   cc: ControllerComponents,
-  s3Client: S3Client
+  s3Client: S3Client,
+  authenticatedAction: AuthenticatedAction
 )(implicit ec: ExecutionContext, materializer: Materializer) extends AbstractController(cc) {
 
   def upload: Action[MultipartFormData[MultipartUploadResult]] =
-    Action(parse.multipartFormData(handleAWSUploadResult, maxLength = 2 * 1024 * 1024)) { implicit request =>
+    authenticatedAction(parse.multipartFormData(handleAWSUploadResult, maxLength = 2 * 1024 * 1024)) { implicit request =>
       val maybeUploadResult = request.body.file("file").map {
         case FilePart(_, _, _, multipartUploadResult, _, _) =>
           multipartUploadResult
       }
       maybeUploadResult.fold(
-        InternalServerError("Something went wrong!")
+        InternalServerError(Json.obj("status" -> INTERNAL_SERVER_ERROR, "detail" -> "Something went wrong!"))
       )(uploadResult =>
         Ok(Json.toJson(Map("status" -> "success", "key" -> uploadResult.getKey)))
       )
     }
 
-  def download(key: String): Action[AnyContent] = Action.async { implicit request =>
+  def download(key: String): Action[AnyContent] = authenticatedAction.async { implicit request =>
     val s3ObjectSource = s3Client.download(key)
 
     val contentLengthFuture = s3ObjectSource.toMat(Sink.head)(Keep.left).run().map(_.getContentLength)
@@ -49,7 +50,7 @@ class FileController @Inject()(
     }
   }
 
-  def delete(key: String): Action[AnyContent] = Action.async { implicit request =>
+  def delete(key: String): Action[AnyContent] = authenticatedAction.async { implicit request =>
     s3Client.delete(key).run().map { _ =>
       Ok(Json.obj("status" -> "success"))
     }.recover {
@@ -57,7 +58,7 @@ class FileController @Inject()(
     }
   }
 
-  def list: Action[AnyContent] = Action.async { implicit request =>
+  def list: Action[AnyContent] = authenticatedAction.async { implicit request =>
     s3Client.list.runFold(Seq.empty[JsObject]) { (acc, summary) =>
       acc :+ Json.obj("key" -> summary.getKey, "size" -> summary.getSize.toString)
     }.map { data =>

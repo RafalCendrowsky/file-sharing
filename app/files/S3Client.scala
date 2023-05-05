@@ -1,4 +1,4 @@
-package models
+package files
 
 import akka.stream.alpakka.s3.scaladsl.S3
 import akka.stream.alpakka.s3.{ListBucketResultContents, MultipartUploadResult, ObjectMetadata}
