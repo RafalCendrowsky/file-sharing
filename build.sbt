@@ -14,7 +14,6 @@ lazy val root = (project in file("."))
       "com.typesafe.akka" %% "akka-actor-typed" % "2.7.0",
       "com.typesafe.akka" %% "akka-serialization-jackson" % "2.7.0",
       "com.typesafe.akka" %% "akka-slf4j" % "2.7.0",
-
-
+      "com.github.etaty" %% "rediscala" % "1.9.0"
     )
   )

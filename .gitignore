@@ -3,3 +3,4 @@ target
 /.idea
 /logs
 /RUNNING_PID
+/redis-data
