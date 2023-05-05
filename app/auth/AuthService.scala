@@ -2,7 +2,6 @@ package auth
 
 import akka.actor.ActorSystem
 import com.typesafe.config.ConfigFactory
-import org.slf4j.LoggerFactory
 import redis.RedisClient
 
 import javax.inject.{Inject, Singleton}
@@ -22,8 +21,7 @@ class AuthServiceImpl @Inject()(implicit system: ActorSystem, ec: ExecutionConte
   private val host = ConfigFactory.load().getString("redis.host")
   private val port = ConfigFactory.load().getInt("redis.port")
   private val redis = RedisClient(host, port)
-  private val log = LoggerFactory.getLogger(this.getClass)
-
+  
   override def authenticate(username: String, password: String): Future[Option[User]] = {
     redis.get(username).map {
       case Some(p) if p.utf8String == password => Some(User(username, password))

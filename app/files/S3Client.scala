@@ -10,23 +10,26 @@ import com.typesafe.config.ConfigFactory
 import scala.concurrent.Future
 
 trait S3Client {
-  def multipartUpload(key: String): Sink[ByteString, Future[MultipartUploadResult]]
+  def multipartUpload(user: String, key: String): Sink[ByteString, Future[MultipartUploadResult]]
 
-  def download(key: String): Source[ByteString, Future[ObjectMetadata]]
+  def download(user: String, key: String): Source[ByteString, Future[ObjectMetadata]]
 
-  def delete(key: String): Source[Done, NotUsed]
+  def delete(user: String, key: String): Source[Done, NotUsed]
 
-  def list: Source[ListBucketResultContents, NotUsed]
+  def list(user: String): Source[ListBucketResultContents, NotUsed]
 }
 
 class S3ClientImpl extends S3Client {
   private val bucket = ConfigFactory.load().getString("s3.bucket")
 
-  override def multipartUpload(key: String): Sink[ByteString, Future[MultipartUploadResult]] = S3.multipartUpload(bucket, key)
+  override def multipartUpload(user: String, key: String): Sink[ByteString, Future[MultipartUploadResult]] =
+    S3.multipartUpload(bucket, s"$user/$key")
 
-  override def download(key: String): Source[ByteString, Future[ObjectMetadata]] = S3.getObject(bucket, key)
+  override def download(user: String, key: String): Source[ByteString, Future[ObjectMetadata]] =
+    S3.getObject(bucket, s"$user/$key")
 
-  override def delete(key: String): Source[Done, NotUsed] = S3.deleteObject(bucket, key)
+  override def delete(user: String, key: String): Source[Done, NotUsed] =
+    S3.deleteObject(bucket, s"$user/$key")
 
-  override def list: Source[ListBucketResultContents, NotUsed] = S3.listBucket(bucket, None)
+  override def list(user: String): Source[ListBucketResultContents, NotUsed] = S3.listBucket(bucket, Some(s"$user"))
 }

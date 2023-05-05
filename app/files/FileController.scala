@@ -1,9 +1,10 @@
 package files
 
 import akka.http.scaladsl.model.IllegalUriException
-import akka.stream.Materializer
-import akka.stream.alpakka.s3.{MultipartUploadResult, S3Exception}
-import akka.stream.scaladsl.{Keep, Sink}
+import akka.stream.alpakka.s3.S3Exception
+import akka.stream.scaladsl.{FileIO, Keep, Sink, Source}
+import akka.stream.{IOResult, Materializer}
+import akka.util.ByteString
 import auth.AuthenticatedAction
 import play.api.http.HttpEntity
 import play.api.libs.json.{JsObject, Json}
@@ -12,9 +13,10 @@ import play.api.mvc.MultipartFormData.FilePart
 import play.api.mvc._
 import play.core.parsers.Multipart.{FileInfo, FilePartHandler}
 
-import java.util.UUID
+import java.nio.file.{Files, Path}
 import javax.inject.Inject
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Success
 
 class FileController @Inject()(
   cc: ControllerComponents,
@@ -22,21 +24,20 @@ class FileController @Inject()(
   authenticatedAction: AuthenticatedAction
 )(implicit ec: ExecutionContext, materializer: Materializer) extends AbstractController(cc) {
 
-  def upload: Action[MultipartFormData[MultipartUploadResult]] =
-    authenticatedAction(parse.multipartFormData(handleAWSUploadResult, maxLength = 2 * 1024 * 1024)) { implicit request =>
-      val maybeUploadResult = request.body.file("file").map {
-        case FilePart(_, _, _, multipartUploadResult, _, _) =>
-          multipartUploadResult
+  def upload: Action[MultipartFormData[Source[ByteString, _]]] =
+    authenticatedAction.async(parse.multipartFormData(handleFilePart, maxLength = 2 * 1024 * 1024)) { implicit request =>
+      request.body.file("file").fold(
+        Future.successful(BadRequest("Missing file"))
+      ) {
+        case FilePart(_, filename, _, source, _, _) =>
+          source.runWith(s3Client.multipartUpload(request.user, filename)).map {
+            result => Ok(Json.toJson(Map("status" -> "success", "key" -> result.getKey)))
+          }
       }
-      maybeUploadResult.fold(
-        InternalServerError(Json.obj("status" -> INTERNAL_SERVER_ERROR, "detail" -> "Something went wrong!"))
-      )(uploadResult =>
-        Ok(Json.toJson(Map("status" -> "success", "key" -> uploadResult.getKey)))
-      )
     }
 
   def download(key: String): Action[AnyContent] = authenticatedAction.async { implicit request =>
-    val s3ObjectSource = s3Client.download(key)
+    val s3ObjectSource = s3Client.download(request.user, key)
 
     val contentLengthFuture = s3ObjectSource.toMat(Sink.head)(Keep.left).run().map(_.getContentLength)
 
@@ -51,7 +52,7 @@ class FileController @Inject()(
   }
 
   def delete(key: String): Action[AnyContent] = authenticatedAction.async { implicit request =>
-    s3Client.delete(key).run().map { _ =>
+    s3Client.delete(request.user, key).run().map { _ =>
       Ok(Json.obj("status" -> "success"))
     }.recover {
       recoverS3Result
@@ -59,7 +60,7 @@ class FileController @Inject()(
   }
 
   def list: Action[AnyContent] = authenticatedAction.async { implicit request =>
-    s3Client.list.runFold(Seq.empty[JsObject]) { (acc, summary) =>
+    s3Client.list(request.user).runFold(Seq.empty[JsObject]) { (acc, summary) =>
       acc :+ Json.obj("key" -> summary.getKey, "size" -> summary.getSize.toString)
     }.map { data =>
       Ok(Json.toJson(data))
@@ -68,14 +69,12 @@ class FileController @Inject()(
     }
   }
 
-  private def handleAWSUploadResult: FilePartHandler[MultipartUploadResult] = {
-    case FileInfo(partName, fileName, contentType, _) =>
-      val key = s"${UUID.randomUUID()}${getFileExtension(fileName).getOrElse("")}"
-      val accumulator = Accumulator(s3Client.multipartUpload(key))
-
-      accumulator map {
-        multipartUploadResult =>
-          FilePart(partName, fileName, contentType, multipartUploadResult)
+  private def handleFilePart: FilePartHandler[Source[ByteString, _]] = {
+    case FileInfo(_, fileName, contentType, _) =>
+      val tempFile: Path = Files.createTempFile("prefix-", fileName)
+      val sink: Sink[ByteString, Future[IOResult]] = FileIO.toPath(tempFile)
+      Accumulator(sink).map { case IOResult(_, Success(_)) =>
+        FilePart("file", fileName, contentType, FileIO.fromPath(tempFile))
       }
   }
 
@@ -88,7 +87,4 @@ class FileController @Inject()(
     case ex: Throwable =>
       throw ex
   }
-
-  private def getFileExtension(filename: String): Option[String] =
-    filename.split('.').lastOption.map("." + _)
 }
