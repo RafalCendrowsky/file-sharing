@@ -1,5 +1,6 @@
 package controllers
 
+import akka.http.scaladsl.model.IllegalUriException
 import akka.stream.Materializer
 import akka.stream.alpakka.s3.{MultipartUploadResult, S3Exception}
 import akka.stream.scaladsl.{Keep, Sink}
@@ -35,7 +36,7 @@ class FileController @Inject()(
   }
 
   def download(key: String): Action[AnyContent] = Action.async { implicit request =>
-    val s3ObjectSource = s3Client.getObject(key)
+    val s3ObjectSource = s3Client.download(key)
 
     val contentLengthFuture = s3ObjectSource.toMat(Sink.head)(Keep.left).run()(materializer).map(_.getContentLength)
 
@@ -44,14 +45,14 @@ class FileController @Inject()(
         header = ResponseHeader(OK, Map(CONTENT_LENGTH -> contentLength.toString)),
         body = HttpEntity.Streamed(s3ObjectSource, None, Some("application/octet-stream"))
       )
-    }.recover {
-      case _: S3Exception =>
-        NotFound(Json.obj("status" -> NOT_FOUND, "detail" -> s"Object with key $key not found"))
-      case ex: Throwable =>
-        throw ex
-    }
+    }.recover { recoverS3Result }
   }
 
+  def delete(key: String): Action[AnyContent] = Action.async { implicit request =>
+    s3Client.delete(key).run()(materializer).map { _ =>
+      Ok(Json.obj("status" -> "success"))
+    }.recover { recoverS3Result }
+  }
 
   private def handleAWSUploadResult: FilePartHandler[MultipartUploadResult] = {
     case FileInfo(partName, fileName, contentType, _) =>
@@ -62,6 +63,16 @@ class FileController @Inject()(
         multipartUploadResult =>
           FilePart(partName, fileName, contentType, multipartUploadResult)
       }
+  }
+
+  private def recoverS3Result: PartialFunction[Throwable, Result] = {
+    case ex: S3Exception =>
+      val status = ex.statusCode.intValue()
+      Status(status)(Json.obj("status" -> status, "detail" -> ex.getMessage))
+    case ex: IllegalUriException =>
+      BadRequest(Json.obj("status" -> BAD_REQUEST, "detail" -> ex.getMessage))
+    case ex: Throwable =>
+      throw ex
   }
 
   private def getFileExtension(filename: String): Option[String] =
