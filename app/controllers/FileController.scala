@@ -6,7 +6,7 @@ import akka.stream.alpakka.s3.{MultipartUploadResult, S3Exception}
 import akka.stream.scaladsl.{Keep, Sink}
 import models.S3Client
 import play.api.http.HttpEntity
-import play.api.libs.json.Json
+import play.api.libs.json.{JsObject, Json}
 import play.api.libs.streams.Accumulator
 import play.api.mvc.MultipartFormData.FilePart
 import play.api.mvc._
@@ -18,9 +18,8 @@ import scala.concurrent.ExecutionContext
 
 class FileController @Inject()(
   cc: ControllerComponents,
-  materializer: Materializer,
   s3Client: S3Client
-)(implicit ec: ExecutionContext) extends AbstractController(cc) {
+)(implicit ec: ExecutionContext, materializer: Materializer) extends AbstractController(cc) {
 
   def upload: Action[MultipartFormData[MultipartUploadResult]] =
     Action(parse.multipartFormData(handleAWSUploadResult, maxLength = 2 * 1024 * 1024)) { implicit request =>
@@ -38,7 +37,7 @@ class FileController @Inject()(
   def download(key: String): Action[AnyContent] = Action.async { implicit request =>
     val s3ObjectSource = s3Client.download(key)
 
-    val contentLengthFuture = s3ObjectSource.toMat(Sink.head)(Keep.left).run()(materializer).map(_.getContentLength)
+    val contentLengthFuture = s3ObjectSource.toMat(Sink.head)(Keep.left).run().map(_.getContentLength)
 
     contentLengthFuture.map { contentLength =>
       Result(
@@ -51,8 +50,18 @@ class FileController @Inject()(
   }
 
   def delete(key: String): Action[AnyContent] = Action.async { implicit request =>
-    s3Client.delete(key).run()(materializer).map { _ =>
+    s3Client.delete(key).run().map { _ =>
       Ok(Json.obj("status" -> "success"))
+    }.recover {
+      recoverS3Result
+    }
+  }
+
+  def list: Action[AnyContent] = Action.async { implicit request =>
+    s3Client.list.runFold(Seq.empty[JsObject]) { (acc, summary) =>
+      acc :+ Json.obj("key" -> summary.getKey, "size" -> summary.getSize.toString)
+    }.map { data =>
+      Ok(Json.toJson(data))
     }.recover {
       recoverS3Result
     }

@@ -1,7 +1,7 @@
 package models
 
 import akka.stream.alpakka.s3.scaladsl.S3
-import akka.stream.alpakka.s3.{MultipartUploadResult, ObjectMetadata}
+import akka.stream.alpakka.s3.{ListBucketResultContents, MultipartUploadResult, ObjectMetadata}
 import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
 import akka.{Done, NotUsed}
@@ -15,6 +15,8 @@ trait S3Client {
   def download(key: String): Source[ByteString, Future[ObjectMetadata]]
 
   def delete(key: String): Source[Done, NotUsed]
+
+  def list: Source[ListBucketResultContents, NotUsed]
 }
 
 class S3ClientImpl extends S3Client {
@@ -25,4 +27,6 @@ class S3ClientImpl extends S3Client {
   override def download(key: String): Source[ByteString, Future[ObjectMetadata]] = S3.getObject(bucket, key)
 
   override def delete(key: String): Source[Done, NotUsed] = S3.deleteObject(bucket, key)
+
+  override def list: Source[ListBucketResultContents, NotUsed] = S3.listBucket(bucket, None)
 }
