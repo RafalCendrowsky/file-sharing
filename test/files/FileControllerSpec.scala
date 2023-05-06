@@ -11,7 +11,6 @@ import akka.util.{ByteString, Timeout}
 import auth.{AuthService, User}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.MockitoSugar.when
-import org.openqa.selenium.InvalidArgumentException
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatestplus.play.PlaySpec
 import org.scalatestplus.play.guice.GuiceOneAppPerSuite
@@ -53,7 +52,7 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
       // WITH
       val header: HttpHeader = HttpHeader.parse(CONTENT_LENGTH, "100") match {
         case HttpHeader.ParsingResult.Ok(h, _) => h
-        case Error(_) => throw new InvalidArgumentException("Invalid header")
+        case Error(_) => throw new Exception("Invalid header")
       }
 
       val source: Source[ByteString, Future[ObjectMetadata]] =
