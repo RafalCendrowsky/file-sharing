@@ -33,8 +33,9 @@ class AuthServiceImpl @Inject()(store: KeyValueStore)(
       case true => Future.successful(None)
       case false =>
         val passwordEncrypted = BCrypt.hashpw(password, BCrypt.gensalt())
-        store.set(username, passwordEncrypted).map { _ =>
-          Some(User(username, passwordEncrypted))
+        store.set(username, passwordEncrypted).map {
+          case true => Some(User(username, passwordEncrypted))
+          case _ => None
         }
     }
   }
