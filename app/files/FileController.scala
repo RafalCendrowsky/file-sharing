@@ -32,12 +32,12 @@ class FileController @Inject()(
     parse.multipartFormData(handleFilePart, maxLength = 2 * 1024 * 1024)
   ) { implicit request =>
     request.body.file("file").fold(
-      Future.successful(BadRequest("Missing file"))
+      Future.successful(BadRequest(Json.obj("status" -> BAD_REQUEST, "detail" -> "Missing file")))
     ) {
       case FilePart(_, filename, _, path, _, _) =>
         FileIO.fromPath(path).runWith(storageClient.multipartUpload(request.user, filename)).map {
           result => {
-            Ok(Json.toJson(Map("status" -> "success", "key" -> result.getKey)))
+            Ok(Json.obj("status" -> OK, "key" -> result.getKey))
           }
         }
     }
