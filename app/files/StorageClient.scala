@@ -9,7 +9,7 @@ import com.typesafe.config.ConfigFactory
 
 import scala.concurrent.Future
 
-trait S3Client {
+trait StorageClient {
   def multipartUpload(user: String, key: String): Sink[ByteString, Future[MultipartUploadResult]]
 
   def download(user: String, key: String): Source[ByteString, Future[ObjectMetadata]]
@@ -19,7 +19,7 @@ trait S3Client {
   def list(user: String): Source[ListBucketResultContents, NotUsed]
 }
 
-class S3ClientImpl extends S3Client {
+class S3Client extends StorageClient {
   private val bucket = ConfigFactory.load().getString("s3.bucket")
 
   override def multipartUpload(user: String, key: String): Sink[ByteString, Future[MultipartUploadResult]] =
@@ -28,8 +28,9 @@ class S3ClientImpl extends S3Client {
   override def download(user: String, key: String): Source[ByteString, Future[ObjectMetadata]] =
     S3.getObject(bucket, s"$user/$key")
 
-  override def delete(user: String, key: String): Source[Done, NotUsed] =
+  override def delete(user: String, key: String): Source[Done, NotUsed] = {
     S3.deleteObject(bucket, s"$user/$key")
+  }
 
   override def list(user: String): Source[ListBucketResultContents, NotUsed] = S3.listBucket(bucket, Some(s"$user"))
 }

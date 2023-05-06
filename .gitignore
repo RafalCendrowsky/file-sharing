@@ -4,3 +4,4 @@ target
 /logs
 /RUNNING_PID
 /redis-data
+.env

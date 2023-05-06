@@ -18,9 +18,11 @@ import org.scalatestplus.play.guice.GuiceOneAppPerSuite
 import play.api.Application
 import play.api.libs.json.{JsArray, Json}
 import play.api.mvc.AnyContentAsEmpty
-import play.api.test.Helpers.{AUTHORIZATION, CONTENT_LENGTH, HOST, route, status, writeableOf_AnyContentAsEmpty}
+import play.api.test.Helpers.{AUTHORIZATION, CONTENT_LENGTH, HOST, POST, defaultAwaitTimeout, route, status, writeableOf_AnyContentAsEmpty}
 import play.api.test.{FakeHeaders, FakeRequest, Injecting}
+import repo.KeyValueStore
 
+import java.time.Instant
 import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 
@@ -37,9 +39,9 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
 
   "File controller" must {
 
-    // This is a mock of the S3Client trait
-    val s3Client = inject[S3Client]
+    val storageClient = inject[StorageClient]
     val authService = inject[AuthService]
+    val store = inject[KeyValueStore]
 
     val key = "test-file.txt"
     val username = "test"
@@ -57,7 +59,7 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
       val source: Source[ByteString, Future[ObjectMetadata]] =
         Source.single(ByteString("test")).mapMaterializedValue(_ => Future.successful(ObjectMetadata(List(header))))
 
-      when(s3Client.download(username, key)) thenReturn source
+      when(storageClient.download(username, key)) thenReturn source
 
       // WHEN
       val request = FakeRequest(GET.value, s"/api/v1/files/$key", headers, AnyContentAsEmpty)
@@ -71,12 +73,41 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
       }
     }
 
+    "share a file" in {
+      // WITH
+      when(storageClient.list(username)) thenReturn
+        Source.single(ListBucketResultContents("", s"$username/$key", "", 100, Instant.EPOCH, ""))
+      when(store.set(any[String], any[String], any[Option[Long]])) thenReturn Future.successful(true)
+
+      // WHEN
+      val request = FakeRequest(POST, s"/api/v1/files/share/$key", headers, AnyContentAsEmpty)
+      val result = route(app, request).get
+
+      // THEN
+      status(result) mustBe OK.intValue
+    }
+
+    "refuse to share a nonexistant file" in {
+      // WITH
+      when(storageClient.list(username)) thenReturn
+        Source.empty
+      when(store.set(any[String], any[String], any[Option[Long]])) thenReturn Future.successful(true)
+
+      // WHEN
+      val request = FakeRequest(POST, s"/api/v1/files/share/$key", headers, AnyContentAsEmpty)
+      val result = route(app, request).get
+
+      // THEN
+      status(result) mustBe NotFound.intValue
+    }
+
+
     "return an appropriate error when the file does not exist" in {
       // WITH
       val source: Source[ByteString, Future[ObjectMetadata]] =
         Source.single(ByteString("test")).mapMaterializedValue(_ => Future.failed(S3Exception("File not found", NotFound)))
 
-      when(s3Client.download(username, key)) thenReturn source
+      when(storageClient.download(username, key)) thenReturn source
 
       // WHEN
       val request = FakeRequest(GET.value, s"/api/v1/files/$key", headers, AnyContentAsEmpty)
@@ -84,12 +115,12 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
 
       // THEN
       implicit val timeout: Timeout = Timeout(300.millis)
-      status(result) mustBe NotFound.intValue
+      status(result)(defaultAwaitTimeout) mustBe NotFound.intValue
     }
 
     "delete a file" in {
       // WITH
-      when(s3Client.delete(username, key)) thenReturn Source.single(Done)
+      when(storageClient.delete(username, key)) thenReturn Source.single(Done)
 
       // WHEN
       val request = FakeRequest(DELETE.value, s"/api/v1/files/$key", headers, AnyContentAsEmpty)
@@ -109,7 +140,7 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
         case (key, size) => ListBucketResultContents("", key, "", size, null, "")
       }
 
-      when(s3Client.list(username)) thenReturn Source(objectSummaries)
+      when(storageClient.list(username)) thenReturn Source(objectSummaries)
 
       // WHEN
       val request = FakeRequest(GET.value, "/api/v1/files", headers, AnyContentAsEmpty)

@@ -1,10 +1,9 @@
 package auth
 
 import akka.actor.ActorSystem
-import com.typesafe.config.ConfigFactory
-import redis.RedisClient
+import repo.KeyValueStore
 
-import javax.inject.{Inject, Singleton}
+import javax.inject.Inject
 import scala.concurrent.{ExecutionContext, Future}
 
 case class User(username: String, password: String)
@@ -15,24 +14,23 @@ trait AuthService {
   def register(username: String, password: String): Future[Option[User]]
 }
 
-@Singleton
-class AuthServiceImpl @Inject()(implicit system: ActorSystem, ec: ExecutionContext) extends AuthService {
+class AuthServiceImpl @Inject()(store: KeyValueStore)(
+  implicit
+  system: ActorSystem,
+  ec: ExecutionContext
+) extends AuthService {
 
-  private val host = ConfigFactory.load().getString("redis.host")
-  private val port = ConfigFactory.load().getInt("redis.port")
-  private val redis = RedisClient(host, port)
-  
   override def authenticate(username: String, password: String): Future[Option[User]] = {
-    redis.get(username).map {
-      case Some(p) if p.utf8String == password => Some(User(username, password))
+    store.get(username).map {
+      case Some(p) if p == password => Some(User(username, password))
       case _ => None
     }
   }
 
   override def register(username: String, password: String): Future[Option[User]] = {
-    redis.exists(username).flatMap {
+    store.exists(username).flatMap {
       case true => Future.successful(None)
-      case false => redis.set(username, password).map { _ =>
+      case false => store.set(username, password).map { _ =>
         Some(User(username, password))
       }
     }
