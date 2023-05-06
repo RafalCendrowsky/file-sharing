@@ -1,6 +1,7 @@
 package auth
 
 import akka.actor.ActorSystem
+import org.mindrot.jbcrypt.BCrypt
 import repo.KeyValueStore
 
 import javax.inject.Inject
@@ -22,7 +23,7 @@ class AuthServiceImpl @Inject()(store: KeyValueStore)(
 
   override def authenticate(username: String, password: String): Future[Option[User]] = {
     store.get(username).map {
-      case Some(p) if p == password => Some(User(username, password))
+      case Some(p) if BCrypt.checkpw(password, p) => Some(User(username, p))
       case _ => None
     }
   }
@@ -30,9 +31,11 @@ class AuthServiceImpl @Inject()(store: KeyValueStore)(
   override def register(username: String, password: String): Future[Option[User]] = {
     store.exists(username).flatMap {
       case true => Future.successful(None)
-      case false => store.set(username, password).map { _ =>
-        Some(User(username, password))
-      }
+      case false =>
+        val passwordEncrypted = BCrypt.hashpw(password, BCrypt.gensalt())
+        store.set(username, passwordEncrypted).map { _ =>
+          Some(User(username, passwordEncrypted))
+        }
     }
   }
 }
