@@ -14,8 +14,9 @@ class AuthController @Inject()(
 )(implicit ec: ExecutionContext) extends AbstractController(cc) {
 
   def register: Action[AnyContent] = Action.async { implicit request =>
-    val usernameOpt = request.body.asJson.flatMap(_.as[JsObject].value.get("username")).map(_.as[String])
-    val passwordOpt = request.body.asJson.flatMap(_.as[JsObject].value.get("password")).map(_.as[String])
+    val requestBody: Option[JsObject] = request.body.asJson.map(_.as[JsObject])
+    val usernameOpt = requestBody.flatMap(_.value.get("username")).map(_.as[String])
+    val passwordOpt = requestBody.flatMap(_.value.get("password")).map(_.as[String])
     (usernameOpt, passwordOpt) match {
       case (Some(username), Some(password)) =>
         authService.register(username, password).map {
@@ -27,6 +28,22 @@ class AuthController @Inject()(
       case _ =>
         Future.successful(
           BadRequest(Json.obj("status" -> BAD_REQUEST, "detail" -> "Invalid username or password")))
+    }
+  }
+
+  def changePassword: Action[AnyContent] = authenticatedAction.async { implicit request =>
+    val passwordOpt = request.body.asJson.flatMap(_.as[JsObject].value.get("password")).map(_.as[String])
+    passwordOpt match {
+      case Some(password) =>
+        authService.changePassword(request.user, password).map {
+          case Some(_) =>
+            Ok(Json.obj("status" -> OK, "detail" -> "Password changed successfully"))
+          case None =>
+            BadRequest(Json.obj("status" -> BAD_REQUEST, "detail" -> "Passwords can't match"))
+        }
+      case _ =>
+        Future.successful(
+          BadRequest(Json.obj("status" -> BAD_REQUEST, "detail" -> "Invalid password")))
     }
   }
 

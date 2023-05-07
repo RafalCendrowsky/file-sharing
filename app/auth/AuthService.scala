@@ -13,6 +13,8 @@ trait AuthService {
   def authenticate(username: String, password: String): Future[Option[User]]
 
   def register(username: String, password: String): Future[Option[User]]
+
+  def changePassword(username: String, password: String): Future[Option[User]]
 }
 
 class AuthServiceImpl @Inject()(store: KeyValueStore)(
@@ -31,12 +33,25 @@ class AuthServiceImpl @Inject()(store: KeyValueStore)(
   override def register(username: String, password: String): Future[Option[User]] = {
     store.exists(username).flatMap {
       case true => Future.successful(None)
-      case false =>
-        val passwordEncrypted = BCrypt.hashpw(password, BCrypt.gensalt())
-        store.set(username, passwordEncrypted).map {
-          case true => Some(User(username, passwordEncrypted))
-          case _ => None
-        }
+      case false => storeEncrypted(username, password)
     }
   }
+
+  override def changePassword(username: String, password: String): Future[Option[User]] =
+    store.get(username).flatMap { passOpt =>
+      passOpt map {
+        case pass if BCrypt.checkpw(password, pass) => Future.successful(None)
+        case _ => storeEncrypted(username, password)
+      } getOrElse Future.successful(None)
+    }
+
+  private def storeEncrypted(username: String, password: String): Future[Option[User]] = {
+    val passwordEncrypted = BCrypt.hashpw(password, BCrypt.gensalt())
+    store.set(username, passwordEncrypted).map {
+      case true => Some(User(username, passwordEncrypted))
+      case _ => None
+    }
+  }
+
+
 }

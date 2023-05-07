@@ -101,5 +101,24 @@ class AuthControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
         completed.header.status mustBe BadRequest.intValue
       }
     }
+
+    "change user password" in {
+      // WITH
+      when(authService.authenticate(username, password)) thenReturn Future.successful(Some(user))
+      when(authService.changePassword(username, password)) thenReturn Future.successful(Some(user))
+
+      // WHEN
+      val result = route(app,
+        FakeRequest(
+          POST,
+          "/api/v1/auth/changepass",
+          headers,
+          Json.obj("username" -> username, "password" -> password))).get
+
+      // THEN
+      whenReady(result) { completed =>
+        completed.header.status mustBe OK.intValue
+      }
+    }
   }
 }

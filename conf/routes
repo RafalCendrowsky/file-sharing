@@ -4,6 +4,7 @@
 # ~~~~
 
 POST          /api/v1/auth/register           auth.AuthController.register
+POST          /api/v1/auth/changepass         auth.AuthController.changePassword
 GET           /api/v1/auth/current            auth.AuthController.current
 
 GET           /api/v1/files                   files.FileController.list
