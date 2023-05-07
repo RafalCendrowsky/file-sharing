@@ -12,7 +12,7 @@ import play.api.libs.streams.Accumulator
 import play.api.mvc.MultipartFormData.FilePart
 import play.api.mvc._
 import play.core.parsers.Multipart.{FileInfo, FilePartHandler}
-import repo.KeyValueStore
+import repo.{FileShare, FileShareRepository}
 
 import java.nio.file.{Files, Path}
 import java.util.UUID
@@ -24,7 +24,7 @@ import scala.util.Success
 class FileController @Inject()(
   cc: ControllerComponents,
   storageClient: StorageClient,
-  store: KeyValueStore,
+  shareRepo: FileShareRepository,
   authenticatedAction: AuthenticatedAction
 )(implicit ec: ExecutionContext, materializer: Materializer) extends AbstractController(cc) {
 
@@ -50,7 +50,7 @@ class FileController @Inject()(
     } map {
       case keys if keys.contains(key) =>
         val shareKey = UUID.randomUUID().toString
-        store.set(shareKey, s"$user/$key", Some(60 * 60 * 24))
+        shareRepo.add(FileShare(shareKey, s"$user/$key"), Some(60 * 60 * 24))
         Ok(Json.obj("status" -> "success", "key" -> shareKey, "detail" -> "File available for 24 hours"))
       case _ => NotFound(Json.obj("status" -> NOT_FOUND, "message" -> "File not found"))
     }
@@ -61,8 +61,8 @@ class FileController @Inject()(
   }
 
   def downloadShared(key: String): Action[AnyContent] = Action.async { implicit request =>
-    store.get(key).flatMap {
-      case Some(value) =>
+    shareRepo.get(key).flatMap {
+      case Some(FileShare(_, value)) =>
         val user = value.split("/").head
         val fileKey = value.split("/").last
         download(user, fileKey)

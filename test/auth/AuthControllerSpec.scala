@@ -11,6 +11,7 @@ import play.api.libs.json.{JsObject, Json}
 import play.api.mvc.AnyContentAsEmpty
 import play.api.test.Helpers.{AUTHORIZATION, GET, HOST, POST, route, writeableOf_AnyContentAsEmpty}
 import play.api.test.{FakeHeaders, FakeRequest, Injecting}
+import repo.User
 
 import scala.concurrent.Future
 
@@ -32,7 +33,7 @@ class AuthControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
 
     val username = "test"
     val password = "test"
-    val user = User(username, password)
+    val user = User(username, Some(password))
 
     "authenticate a user" in {
       // WITH

@@ -8,7 +8,7 @@ import akka.http.scaladsl.model.StatusCodes.{NotFound, OK}
 import akka.stream.alpakka.s3.{ListBucketResultContents, ObjectMetadata, S3Exception}
 import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
-import auth.{AuthService, User}
+import auth.AuthService
 import org.mockito.ArgumentMatchers.any
 import org.mockito.MockitoSugar.when
 import org.scalatest.concurrent.ScalaFutures
@@ -19,7 +19,7 @@ import play.api.libs.json.{JsArray, Json}
 import play.api.mvc.AnyContentAsEmpty
 import play.api.test.Helpers.{AUTHORIZATION, CONTENT_LENGTH, HOST, POST, defaultAwaitTimeout, route, status, writeableOf_AnyContentAsEmpty}
 import play.api.test.{FakeHeaders, FakeRequest, Injecting}
-import repo.KeyValueStore
+import repo.{FileShare, FileShareRepository, User}
 
 import java.time.Instant
 import scala.concurrent.Future
@@ -40,13 +40,13 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
 
     val storageClient = inject[StorageClient]
     val authService = inject[AuthService]
-    val store = inject[KeyValueStore]
+    val shareRepo = inject[FileShareRepository]
 
     val key = "test-file.txt"
     val username = "test"
     val headers = FakeHeaders(Seq(AUTHORIZATION -> "Basic dGVzdDp0ZXN0", HOST -> "localhost"))
 
-    when(authService.authenticate(any[String], any[String])) thenReturn Future.successful(Some(User(username, "test")))
+    when(authService.authenticate(any[String], any[String])) thenReturn Future.successful(Some(User(username)))
 
     "download a file" in {
       // WITH
@@ -76,7 +76,7 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
       // WITH
       when(storageClient.list(username)) thenReturn
         Source.single(ListBucketResultContents("", s"$username/$key", "", 100, Instant.EPOCH, ""))
-      when(store.set(any[String], any[String], any[Option[Long]])) thenReturn Future.successful(true)
+      when(shareRepo.add(any[FileShare], any[Option[Long]])) thenReturn Future.successful(true)
 
       // WHEN
       val request = FakeRequest(POST, s"/api/v1/files/share/$key", headers, AnyContentAsEmpty)
@@ -90,7 +90,7 @@ class FileControllerSpec extends PlaySpec with GuiceOneAppPerSuite with Injectin
       // WITH
       when(storageClient.list(username)) thenReturn
         Source.empty
-      when(store.set(any[String], any[String], any[Option[Long]])) thenReturn Future.successful(true)
+      when(shareRepo.add(any[FileShare], any[Option[Long]])) thenReturn Future.successful(true)
 
       // WHEN
       val request = FakeRequest(POST, s"/api/v1/files/share/$key", headers, AnyContentAsEmpty)
